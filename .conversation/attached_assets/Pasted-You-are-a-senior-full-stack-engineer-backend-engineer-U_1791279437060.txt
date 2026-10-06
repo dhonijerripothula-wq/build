@@ -1,0 +1,999 @@
+You are a senior full-stack engineer, backend engineer, UI/UX designer, and product architect.
+
+I need you to build a COMPLETE, WORKING, PRODUCTION-QUALITY MVP for the following problem statement:
+
+"Build an application that recommends efficient public transport routes based on travel time and transfers."
+
+IMPORTANT:
+This must NOT be a static UI/demo.
+Build a real full-stack application with a functioning backend, database, API endpoints, route calculation/recommendation logic, validation, error handling, and a polished responsive frontend.
+
+The application should be deployable and runnable directly inside Replit.
+
+==================================================
+1. PRODUCT GOAL
+==================================================
+
+Build a public transportation route recommendation application.
+
+A user enters:
+
+- Starting location
+- Destination
+- Optional departure time/date
+- Optional preference
+
+The application should find available public transport routes and rank them based primarily on:
+
+1. Total travel time
+2. Number of transfers
+
+The app should clearly recommend the best route while also showing alternative routes.
+
+Example:
+
+FROM:
+Hyderabad Railway Station
+
+TO:
+HITEC City
+
+The application should return something like:
+
+BEST ROUTE
+Metro + Bus
+
+Total time: 42 min
+Transfers: 1
+Walking: 7 min
+
+Route:
+Walk → Metro → Transfer → Bus → Walk
+
+ALTERNATIVE 2
+Bus
+
+Total time: 51 min
+Transfers: 0
+
+ALTERNATIVE 3
+Metro + Bus
+
+Total time: 55 min
+Transfers: 2
+
+The exact data should come from the configured transport data provider rather than hardcoded UI values.
+
+==================================================
+2. TECH STACK
+==================================================
+
+Use a modern full-stack architecture.
+
+Preferred stack:
+
+Frontend:
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui or another clean component system
+- Responsive mobile-first design
+
+Backend:
+- Node.js
+- TypeScript
+- Express
+
+Database:
+- PostgreSQL
+
+ORM:
+- Prisma
+
+Validation:
+- Zod
+
+Maps:
+- Use a map provider abstraction.
+- Prefer OpenStreetMap-compatible mapping where practical.
+- If a provider API key is required, read it from environment variables/Replit Secrets.
+- NEVER hardcode API keys.
+
+Transportation data:
+Create a transport-data abstraction so the application is not tightly coupled to one provider.
+
+The application should support:
+
+A. GTFS/static public transportation data
+B. Optional external routing/transit API integration when credentials are available
+C. Local/demo transportation data as a fallback so the application remains usable without external API credentials.
+
+IMPORTANT:
+Do not make the entire application dependent on an unavailable API key.
+
+==================================================
+3. APPLICATION ARCHITECTURE
+==================================================
+
+Create this general structure:
+
+/client
+  /src
+    /components
+    /pages
+    /hooks
+    /services
+    /types
+    /utils
+
+/server
+  /routes
+  /services
+  /providers
+  /algorithms
+  /middleware
+  /utils
+
+/prisma
+  schema.prisma
+  seed.ts
+
+/shared
+  types
+  schemas
+
+Use clean separation between:
+
+UI
+↓
+Frontend API client
+↓
+Backend REST API
+↓
+Transport service
+↓
+Routing/recommendation engine
+↓
+Database / external transport provider
+
+Do not put business logic directly inside React components.
+
+==================================================
+4. CORE USER FLOW
+==================================================
+
+The homepage should have a prominent route search interface.
+
+Fields:
+
+FROM
+[ Search location ]
+
+TO
+[ Search destination ]
+
+DEPARTURE
+[ Now ▼ ]
+
+Optional:
+
+[ Departure time/date ]
+
+Button:
+
+[ FIND BEST ROUTES ]
+
+When submitted:
+
+1. Validate input.
+2. Geocode locations if necessary.
+3. Send request to backend.
+4. Backend obtains transport options.
+5. Calculate route duration.
+6. Calculate transfers.
+7. Calculate walking time where available.
+8. Rank routes.
+9. Return the best routes.
+10. Frontend displays them visually.
+
+Do not fake the loading process.
+
+Use actual API calls between frontend and backend.
+
+==================================================
+5. BACKEND API
+==================================================
+
+Implement REST APIs.
+
+At minimum:
+
+GET /api/health
+
+GET /api/geocode?q=
+
+POST /api/routes/search
+
+GET /api/routes/:id
+
+GET /api/transit/stops
+
+GET /api/transit/lines
+
+POST /api/admin/gtfs/import
+
+Example request:
+
+POST /api/routes/search
+
+{
+  "origin": {
+    "lat": 17.3850,
+    "lng": 78.4867
+  },
+  "destination": {
+    "lat": 17.4483,
+    "lng": 78.3915
+  },
+  "departureTime": "2026-10-06T15:00:00+05:30",
+  "preferences": {
+    "priority": "balanced"
+  }
+}
+
+Example response:
+
+{
+  "requestId": "abc123",
+  "origin": {},
+  "destination": {},
+  "recommendedRoute": {
+    "id": "route-1",
+    "durationMinutes": 42,
+    "transfers": 1,
+    "walkingMinutes": 7,
+    "score": 91,
+    "segments": []
+  },
+  "alternatives": []
+}
+
+Return useful HTTP status codes and meaningful error messages.
+
+==================================================
+6. ROUTE RECOMMENDATION ENGINE
+==================================================
+
+This is the most important part of the project.
+
+Do NOT simply sort routes randomly.
+
+Create a real route scoring algorithm.
+
+Every route should have:
+
+- Total duration
+- Number of transfers
+- Walking duration
+- Waiting duration if available
+- Number of transit legs
+- Route reliability if available
+- Transport modes
+
+Create a configurable scoring function.
+
+Default balanced score:
+
+score =
+  normalizedTravelTime * 0.60
+  +
+  normalizedTransfers * 0.25
+  +
+  normalizedWalkingTime * 0.10
+  +
+  normalizedWaitingTime * 0.05
+
+Lower cost should mean a better route.
+
+The exact implementation can normalize values before calculating the score.
+
+Support these user preferences:
+
+1. FASTEST
+   Prioritize minimum total travel time.
+
+2. FEWEST_TRANSFERS
+   Strongly penalize transfers.
+
+3. BALANCED
+   Balance time and transfers.
+
+4. LEAST_WALKING
+   Minimize walking.
+
+The recommendation engine should be isolated in its own service/module so it can be tested independently.
+
+==================================================
+7. TRANSFER LOGIC
+==================================================
+
+A transfer means changing from one transit service/line to another.
+
+Examples:
+
+Bus → Bus on same line:
+0 transfers
+
+Bus Route A → Bus Route B:
+1 transfer
+
+Metro → Bus:
+1 transfer
+
+Metro Line A → Metro Line B:
+1 transfer
+
+Walking between nearby stops should NOT automatically count as a transit transfer unless the user changes transport service.
+
+Make the transfer calculation deterministic.
+
+==================================================
+8. GTFS SUPPORT
+==================================================
+
+Implement GTFS support.
+
+The backend should be able to import a GTFS ZIP containing standard files such as:
+
+agency.txt
+stops.txt
+routes.txt
+trips.txt
+stop_times.txt
+calendar.txt
+calendar_dates.txt
+
+Optionally support:
+
+shapes.txt
+
+Create database tables/models for the relevant GTFS entities.
+
+Build an importer that:
+
+1. Accepts a GTFS ZIP.
+2. Validates required files.
+3. Parses CSV files.
+4. Inserts/upserts records into PostgreSQL.
+5. Handles duplicate imports safely.
+6. Reports import errors.
+7. Shows import statistics.
+
+Example:
+
+Imported:
+- 850 stops
+- 42 routes
+- 1,200 trips
+- 28,000 stop times
+
+If no GTFS dataset has been configured, the application should use a small seeded demo transportation dataset so the entire application can still be demonstrated.
+
+IMPORTANT:
+Clearly separate demo data from real transportation data.
+
+==================================================
+9. ROUTING ENGINE
+==================================================
+
+Create a backend service that can construct possible transit journeys.
+
+The engine should consider:
+
+- Origin proximity to stops
+- Destination proximity to stops
+- Transit lines
+- Stop sequence
+- Departure times
+- Arrival times
+- Transfers
+- Walking connections
+
+Generate multiple candidate journeys rather than only one.
+
+Then pass those candidates into the recommendation/scoring engine.
+
+Avoid brute-force combinations that could become extremely slow.
+
+Use reasonable limits such as:
+
+MAX_TRANSFERS = 3
+
+MAX_CANDIDATE_ROUTES = 20
+
+MAX_WALKING_DISTANCE = configurable
+
+==================================================
+10. EXTERNAL PROVIDER ABSTRACTION
+==================================================
+
+Create an interface similar to:
+
+interface TransitProvider {
+  searchRoutes(input): Promise<RouteOption[]>;
+  searchStops(input): Promise<TransitStop[]>;
+  geocode(query): Promise<Location[]>;
+}
+
+Implement:
+
+DemoTransitProvider
+
+GTFSProvider
+
+Optional ExternalTransitProvider
+
+This makes it possible to change the transport data provider without rewriting the application.
+
+If an external API is used:
+
+- Store credentials in Replit Secrets/environment variables.
+- Never expose API keys to the frontend.
+- Never commit secrets.
+- Gracefully fall back when credentials are missing.
+
+==================================================
+11. DATABASE
+==================================================
+
+Use PostgreSQL + Prisma.
+
+Create appropriate models for:
+
+TransitAgency
+TransitRoute
+TransitStop
+TransitTrip
+StopTime
+TransitService
+RouteSearch
+RouteResult
+RouteSegment
+
+Include timestamps where appropriate.
+
+Add indexes for frequently queried fields.
+
+Examples:
+
+TransitStop:
+- id
+- externalId
+- name
+- latitude
+- longitude
+
+TransitRoute:
+- id
+- externalId
+- shortName
+- longName
+- transportMode
+- agencyId
+
+StopTime:
+- tripId
+- stopId
+- arrivalTime
+- departureTime
+- stopSequence
+
+==================================================
+12. MAP EXPERIENCE
+==================================================
+
+Create a map view showing:
+
+- Origin marker
+- Destination marker
+- Transit stops
+- Recommended route
+- Route segments
+- Walking portions
+- Transit portions
+
+Use different visual treatment for:
+
+Walking
+Bus
+Metro
+Train
+Other transit modes
+
+If actual route geometry is unavailable, draw a reasonable polyline through the route stops rather than pretending exact road geometry exists.
+
+The map must remain functional even if optional map credentials are missing.
+
+==================================================
+13. FRONTEND DESIGN
+==================================================
+
+The UI should look like a polished modern mobility application.
+
+Design direction:
+
+- Dark/blue modern visual language
+- Clean cards
+- Rounded corners
+- Subtle gradients
+- Strong typography
+- Clear hierarchy
+- Excellent mobile responsiveness
+- Smooth but restrained animations
+
+Do NOT make it look like a generic admin dashboard.
+
+The primary screen should immediately communicate:
+
+"Find the smartest way to get there."
+
+Suggested hero:
+
+SMARTER
+PUBLIC TRANSPORT
+ROUTES
+
+"Compare travel time and transfers to find the route that works best for you."
+
+Then:
+
+FROM
+TO
+DEPARTURE
+
+[FIND BEST ROUTE]
+
+==================================================
+14. ROUTE RESULTS UI
+==================================================
+
+After searching, display:
+
+RECOMMENDED ROUTE
+
+★★★★★ or a clear "BEST MATCH" badge
+
+42 min
+1 transfer
+7 min walking
+
+Then show the journey timeline:
+
+Origin
+│
+🚶 Walk 5 min
+│
+🚇 Metro Line A
+│
+Transfer
+│
+🚌 Bus 25
+│
+🚶 Walk 2 min
+│
+Destination
+
+Also show:
+
+Departure
+Arrival
+Total duration
+Transfers
+Walking time
+Waiting time
+Transport modes
+
+Then display alternative routes underneath.
+
+Each route card should have:
+
+- Duration
+- Transfers
+- Walking
+- Modes
+- Departure/arrival
+- Recommendation reason
+
+Example:
+
+BEST MATCH
+"8 min faster than the next best route with only 1 transfer."
+
+==================================================
+15. COMPARISON FEATURE
+==================================================
+
+Allow users to compare routes.
+
+Create a comparison view:
+
+                Route A   Route B   Route C
+
+Travel time       42m       48m       55m
+Transfers          1         0         2
+Walking            7m        4m         3m
+Waiting            5m        8m         6m
+
+Clearly highlight the recommended route.
+
+==================================================
+16. SEARCH HISTORY
+==================================================
+
+Implement basic recent searches.
+
+Store:
+
+origin
+destination
+departure time
+selected route
+createdAt
+
+Display the last few searches.
+
+Allow clicking a previous search to run it again.
+
+==================================================
+17. ERROR STATES
+==================================================
+
+Handle:
+
+- Invalid location
+- Location not found
+- No transit route
+- External API failure
+- GTFS import failure
+- Database failure
+- Network failure
+- Missing API credentials
+- Invalid departure time
+
+Example:
+
+"No public transport route was found between these locations."
+
+Provide a useful suggestion instead of a blank screen.
+
+==================================================
+18. LOADING EXPERIENCE
+==================================================
+
+While searching show:
+
+Finding nearby stops...
+Checking transit routes...
+Calculating travel times...
+Ranking the best options...
+
+But these messages must correspond to the actual backend process and should not fake a long loading delay.
+
+==================================================
+19. ADMIN / DATA MANAGEMENT
+==================================================
+
+Create a simple admin/data page.
+
+Allow:
+
+- GTFS ZIP upload
+- View imported agencies
+- View number of routes
+- View number of stops
+- View trips
+- View import status
+
+Protect admin endpoints appropriately.
+
+For the MVP, a simple admin authentication mechanism is acceptable, but never expose destructive admin endpoints without protection.
+
+==================================================
+20. DEMO DATA
+==================================================
+
+Seed a realistic demo transportation network.
+
+Create:
+
+- Multiple transit lines
+- At least 20 stops
+- Multiple routes
+- Multiple trips
+- Different travel times
+- Interchange/transfer stations
+
+The dataset must intentionally create situations where:
+
+Route A:
+Fast but has 2 transfers
+
+Route B:
+Slightly slower but has 0 transfers
+
+Route C:
+Moderate time and 1 transfer
+
+This will demonstrate that the recommendation engine actually makes decisions.
+
+Do NOT hardcode the final recommendation.
+
+The recommendation must be calculated from the route data.
+
+==================================================
+21. TESTING
+==================================================
+
+Write tests for the most important backend logic.
+
+At minimum test:
+
+- Transfer calculation
+- Route scoring
+- Fastest preference
+- Fewest transfers preference
+- Balanced preference
+- No-route case
+- GTFS parsing
+- Invalid input
+- Duplicate GTFS import
+
+Create at least 10 meaningful automated tests.
+
+==================================================
+22. SECURITY
+==================================================
+
+Implement:
+
+- Environment variables for secrets
+- Input validation using Zod
+- SQL injection protection through Prisma
+- File upload validation
+- GTFS ZIP size limits
+- API error sanitization
+- CORS configuration
+- Rate limiting on expensive route search endpoints where appropriate
+
+Never expose database credentials or API keys to the browser.
+
+==================================================
+23. PERFORMANCE
+==================================================
+
+The route search endpoint should be designed to be fast.
+
+Add:
+
+- Database indexes
+- Nearby-stop spatial filtering
+- Candidate limits
+- Caching where useful
+- Avoid unnecessary database queries
+- Avoid loading the entire GTFS dataset into memory for every request
+
+Do not perform expensive route calculations directly inside React.
+
+==================================================
+24. RESPONSIVENESS
+==================================================
+
+The application must work well on:
+
+- Mobile
+- Tablet
+- Desktop
+
+Mobile should be treated as a first-class experience.
+
+The search interface should be extremely easy to use on a phone.
+
+==================================================
+25. ACCESSIBILITY
+==================================================
+
+Implement:
+
+- Semantic HTML
+- Keyboard navigation
+- Proper labels
+- Accessible buttons
+- Sufficient contrast
+- Screen-reader-friendly route information
+- Focus states
+
+==================================================
+26. ENVIRONMENT VARIABLES
+==================================================
+
+Create a .env.example file.
+
+Possible variables:
+
+DATABASE_URL=
+
+MAP_API_KEY=
+
+TRANSIT_API_KEY=
+
+GEOCODING_API_KEY=
+
+ADMIN_PASSWORD=
+
+Do not require every variable if the corresponding feature can operate with the fallback implementation.
+
+Document every environment variable.
+
+==================================================
+27. README
+==================================================
+
+Create a professional README explaining:
+
+1. Project overview
+2. Features
+3. Architecture
+4. Tech stack
+5. Database setup
+6. Environment variables
+7. How to run locally
+8. How to run Prisma migrations
+9. How to seed demo data
+10. How to import GTFS
+11. How the recommendation algorithm works
+12. API documentation
+13. Deployment instructions for Replit
+14. Limitations
+15. Future improvements
+
+==================================================
+28. REPLIT REQUIREMENTS
+==================================================
+
+The application must run using a simple command.
+
+Configure package.json scripts appropriately.
+
+For example:
+
+npm run dev
+
+The Replit environment should start the frontend and backend correctly.
+
+Avoid unnecessary infrastructure.
+
+Do not require Docker unless absolutely necessary.
+
+Use Replit-compatible services and configuration.
+
+==================================================
+29. IMPORTANT PRODUCT RULE
+==================================================
+
+Do not create fake functionality.
+
+If a button says:
+
+"Find Routes"
+
+it must actually call the backend.
+
+If the backend returns routes, display those routes.
+
+If there is no route, show a real no-results state.
+
+If an external API is unavailable, use the configured fallback provider.
+
+If demo data is being used, clearly identify it internally as demo data.
+
+==================================================
+30. IMPLEMENTATION ORDER
+==================================================
+
+Build in this order:
+
+PHASE 1
+Set up project and architecture.
+
+PHASE 2
+Set up PostgreSQL and Prisma.
+
+PHASE 3
+Create GTFS-compatible data models.
+
+PHASE 4
+Create demo transportation dataset and seed it.
+
+PHASE 5
+Implement transport provider abstraction.
+
+PHASE 6
+Implement route search engine.
+
+PHASE 7
+Implement transfer calculation.
+
+PHASE 8
+Implement recommendation/scoring engine.
+
+PHASE 9
+Create backend REST APIs.
+
+PHASE 10
+Create frontend search experience.
+
+PHASE 11
+Create route result cards.
+
+PHASE 12
+Create map visualization.
+
+PHASE 13
+Create route comparison.
+
+PHASE 14
+Create search history.
+
+PHASE 15
+Create GTFS admin import.
+
+PHASE 16
+Add validation, security and error handling.
+
+PHASE 17
+Add automated tests.
+
+PHASE 18
+Polish UI/UX.
+
+PHASE 19
+Run the entire application.
+
+PHASE 20
+Fix every build error, TypeScript error, API error and runtime error you find.
+
+==================================================
+31. FINAL VERIFICATION
+==================================================
+
+Before declaring the project complete, actually verify:
+
+- Frontend starts.
+- Backend starts.
+- Database connects.
+- Prisma migrations work.
+- Seed script works.
+- Demo data exists.
+- Search endpoint works.
+- Frontend can call backend.
+- A route search returns real route objects.
+- Routes are correctly ranked.
+- Transfers are calculated.
+- Route cards render.
+- Map renders.
+- Error states work.
+- Tests pass.
+- No API secrets are exposed.
+- No major console errors remain.
+- No broken buttons remain.
+
+If you discover an error, fix it rather than simply documenting it.
+
+Do not stop after generating the UI.
+
+The final result must be a working end-to-end public transportation route recommendation application.
+
+==================================================
+32. SUCCESS CRITERIA
+==============

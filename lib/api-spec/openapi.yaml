@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Transit routing and data management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: routes
+    description: Route search and recommendations
+  - name: transit
+    description: Stops, lines, and network information
+  - name: admin
+    description: Protected transit data administration
 paths:
   /healthz:
     get:
@@ -24,7 +30,173 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /routes/search:
+    post:
+      operationId: searchRoutes
+      tags: [routes]
+      summary: Find and rank public transport routes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RouteSearchInput"
+      responses:
+        "200":
+          description: Ranked route options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteSearchResult"
+        "400":
+          description: Invalid search
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No route found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /routes/{id}:
+    get:
+      operationId: getRoute
+      tags: [routes]
+      summary: Get one saved route search
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Saved route search
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteSearchResult"
+        "404":
+          description: Search not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /routes/history:
+    get:
+      operationId: getRouteHistory
+      tags: [routes]
+      summary: List recent route searches
+      responses:
+        "200":
+          description: Recent searches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RouteHistoryItem"
+  /geocode:
+    get:
+      operationId: searchLocations
+      tags: [transit]
+      summary: Search known locations and transit stops
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        "200":
+          description: Matching locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitLocation"
+  /transit/stops:
+    get:
+      operationId: getTransitStops
+      tags: [transit]
+      summary: List transit stops
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transit stops
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitStop"
+  /transit/lines:
+    get:
+      operationId: getTransitLines
+      tags: [transit]
+      summary: List transit lines
+      responses:
+        "200":
+          description: Transit lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitLine"
+  /admin/gtfs/status:
+    get:
+      operationId: getGtfsStatus
+      tags: [admin]
+      summary: Get transit data source and import statistics
+      responses:
+        "200":
+          description: Current network data status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GtfsStatus"
+  /admin/gtfs/import:
+    post:
+      operationId: importGtfs
+      tags: [admin]
+      summary: Import a GTFS ZIP archive (requires admin authorization)
+      security:
+        - adminPassword: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/GtfsImportInput"
+      responses:
+        "200":
+          description: Import completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GtfsImportResult"
+        "401":
+          description: Admin authorization required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
+  securitySchemes:
+    adminPassword:
+      type: apiKey
+      in: header
+      name: x-admin-password
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +205,202 @@ components:
           type: string
       required:
         - status
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    RouteSearchInput:
+      type: object
+      required: [origin, destination, preferences]
+      properties:
+        origin:
+          type: string
+          minLength: 2
+          maxLength: 160
+        destination:
+          type: string
+          minLength: 2
+          maxLength: 160
+        departureTime:
+          type: string
+          format: date-time
+        preferences:
+          type: object
+          required: [priority]
+          properties:
+            priority:
+              type: string
+              enum: [balanced, fastest, fewest_transfers, least_walking]
+    RouteSearchResult:
+      type: object
+      required: [requestId, origin, destination, provider, recommendedRouteId, routes]
+      properties:
+        requestId:
+          type: string
+        origin:
+          $ref: "#/components/schemas/TransitLocation"
+        destination:
+          $ref: "#/components/schemas/TransitLocation"
+        provider:
+          type: string
+        recommendedRouteId:
+          type: string
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitRouteOption"
+    TransitLocation:
+      type: object
+      required: [name, latitude, longitude]
+      properties:
+        name:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+    TransitRouteOption:
+      type: object
+      required: [id, durationMinutes, transfers, walkingMinutes, waitingMinutes, departureTime, arrivalTime, score, modes, reason, segments]
+      properties:
+        id:
+          type: string
+        durationMinutes:
+          type: integer
+        transfers:
+          type: integer
+        walkingMinutes:
+          type: integer
+        waitingMinutes:
+          type: integer
+        departureTime:
+          type: string
+        arrivalTime:
+          type: string
+        score:
+          type: number
+        modes:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteSegment"
+    RouteSegment:
+      type: object
+      required: [mode, lineName, fromStop, toStop, durationMinutes, fromLatitude, fromLongitude, toLatitude, toLongitude]
+      properties:
+        mode:
+          type: string
+        lineName:
+          type: string
+        fromStop:
+          type: string
+        toStop:
+          type: string
+        durationMinutes:
+          type: integer
+        fromLatitude:
+          type: number
+        fromLongitude:
+          type: number
+        toLatitude:
+          type: number
+        toLongitude:
+          type: number
+    RouteHistoryItem:
+      type: object
+      required: [id, origin, destination, departureTime, createdAt]
+      properties:
+        id:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        departureTime:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    TransitStop:
+      type: object
+      required: [id, name, latitude, longitude]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        lines:
+          type: array
+          items:
+            type: string
+    TransitLine:
+      type: object
+      required: [id, name, mode, color, stopCount]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mode:
+          type: string
+        color:
+          type: string
+        stopCount:
+          type: integer
+    GtfsStatus:
+      type: object
+      required: [provider, isDemo, stops, routes, trips, importedAt, importEnabled]
+      properties:
+        provider:
+          type: string
+        isDemo:
+          type: boolean
+        stops:
+          type: integer
+        routes:
+          type: integer
+        trips:
+          type: integer
+        importedAt:
+          type: ["string", "null"]
+        importEnabled:
+          type: boolean
+    GtfsImportInput:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+    GtfsImportResult:
+      type: object
+      required: [success, imported, provider]
+      properties:
+        success:
+          type: boolean
+        provider:
+          type: string
+        imported:
+          type: object
+          required: [stops, routes, trips, stopTimes]
+          properties:
+            stops:
+              type: integer
+            routes:
+              type: integer
+            trips:
+              type: integer
+            stopTimes:
+              type: integer
 

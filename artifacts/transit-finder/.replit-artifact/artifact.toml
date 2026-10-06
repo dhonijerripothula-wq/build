@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Transit Route Finder"
+description = "A responsive public-transport planner that compares journey time, transfers, walking, and waiting to recommend routes, with a seeded Hyderabad demo network and support for transit data imports."
+version = "1.0.0"
+id = "artifacts/transit-finder"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25061
+
+[services.development]
+run = "pnpm --filter @workspace/transit-finder run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/transit-finder", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/transit-finder/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25061"
+BASE_PATH = "/"
